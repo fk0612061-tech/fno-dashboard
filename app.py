@@ -6,7 +6,6 @@ from curl_cffi import requests
 import time
 from datetime import datetime
 
-# Set page configuration for a Bloomberg-style widescreen terminal
 st.set_page_config(
     layout="wide",
     page_title="PRO-TERMINAL | NSE Real-Time Market Intelligence",
@@ -14,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Institutional Dark Theme CSS
+# Custom Institutional Dark Theme CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
@@ -28,20 +27,19 @@ st.markdown("""
         color: #e6edf3;
     }
     
-    /* Top Navigation Banner */
     .top-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 12px 24px;
+        padding: 14px 20px;
         background: #0f141c;
         border-bottom: 1px solid #1f2937;
-        margin-bottom: 20px;
+        margin-bottom: 18px;
         border-radius: 8px;
     }
     .brand-title {
-        font-family: 'JetBrains+Mono', monospace;
-        font-size: 1.4rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 1.3rem;
         font-weight: 700;
         letter-spacing: 1px;
         color: #38bdf8;
@@ -67,27 +65,24 @@ st.markdown("""
         box-shadow: 0 0 8px #22c55e;
     }
     
-    /* Metric Cards */
     div[data-testid="stMetric"] {
         background-color: #0f172a;
         border: 1px solid #1e293b;
-        padding: 14px 18px;
+        padding: 12px 16px;
         border-radius: 8px;
     }
     div[data-testid="stMetricLabel"] {
         font-size: 0.8rem;
         text-transform: uppercase;
         color: #94a3b8;
-        letter-spacing: 0.5px;
     }
     div[data-testid="stMetricValue"] {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 1.5rem;
+        font-size: 1.4rem;
         font-weight: 700;
         color: #f8fafc;
     }
     
-    /* Tab Styling */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         border-bottom: 1px solid #1f2937;
@@ -98,7 +93,7 @@ st.markdown("""
         border: 1px solid #1e293b;
         color: #94a3b8;
         border-radius: 6px 6px 0 0;
-        padding: 8px 20px;
+        padding: 8px 18px;
         font-weight: 600;
     }
     .stTabs [aria-selected="true"] {
@@ -106,17 +101,21 @@ st.markdown("""
         color: #ffffff !important;
         border-color: #3b82f6 !important;
     }
-    
-    /* DataFrame Styling */
-    div[data-testid="stDataFrame"] {
-        border: 1px solid #1e293b;
-        border-radius: 8px;
-        background: #0f141c;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- NETWORK ENGINE -----------------
+# Helper function for safe float parsing
+def clean_float(value, default=0.0):
+    try:
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            return float(value.replace(",", "").strip())
+        return default
+    except:
+        return default
+
+# Network Engine
 def get_session():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -140,11 +139,12 @@ def fetch_market_indices():
         res = s.get("https://www.nseindia.com/api/allIndices", headers=headers, timeout=10).json()
         indices = {}
         for item in res.get("data", []):
-            if item.get("indexSymbol") in ["NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "NIFTY IT"]:
-                indices[item.get("indexSymbol")] = {
-                    "last": item.get("last"),
-                    "change": item.get("change"),
-                    "pChange": item.get("percentChange")
+            name = item.get("indexSymbol")
+            if name in ["NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "NIFTY IT"]:
+                indices[name] = {
+                    "last": clean_float(item.get("last")),
+                    "change": clean_float(item.get("change")),
+                    "pChange": clean_float(item.get("percentChange"))
                 }
         return indices
     except:
@@ -160,10 +160,10 @@ def fetch_fno_market_data():
         res = s.get(url, headers=headers, timeout=10).json()
         records = []
         for row in res.get("allSec", {}).get("data", []):
-            ltp = float(row.get("ltp", 0))
-            p_chg = float(row.get("pChange", 0))
-            oi = float(row.get("openInterest", 0))
-            oi_chg = float(row.get("pchangeinOpenInterest", 0))
+            ltp = clean_float(row.get("ltp"))
+            p_chg = clean_float(row.get("pChange"))
+            oi = clean_float(row.get("openInterest"))
+            oi_chg = clean_float(row.get("pchangeinOpenInterest"))
             
             if p_chg > 0 and oi_chg > 0:
                 trend = "Long Buildup"
@@ -180,7 +180,7 @@ def fetch_fno_market_data():
                 "Symbol": row.get("symbol"),
                 "LTP (₹)": ltp,
                 "% Price Chg": p_chg,
-                "Open Interest": oi,
+                "Open Interest": int(oi),
                 "% OI Chg": oi_chg,
                 "Build-up": trend
             })
@@ -197,7 +197,7 @@ def fetch_live_option_chain(symbol):
         endpoint = "indices" if symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"] else "equities"
         url = f"https://www.nseindia.com/api/option-chain-{endpoint}?symbol={symbol}"
         res = s.get(url, headers=headers, timeout=10).json()
-        underlying = res["records"]["underlyingValue"]
+        underlying = clean_float(res["records"]["underlyingValue"])
         expiries = res["records"]["expiryDates"]
         data = res["records"]["data"]
         return underlying, expiries, data
@@ -205,6 +205,8 @@ def fetch_live_option_chain(symbol):
         return 0, [], []
 
 def calculate_max_pain(df):
+    if df.empty:
+        return 0
     strikes = df["Strike"].tolist()
     total_loss = []
     for strike in strikes:
@@ -219,7 +221,7 @@ def calculate_max_pain(df):
         return 0
     return strikes[total_loss.index(min(total_loss))]
 
-# ----------------- TOP BANNER -----------------
+# Top Banner
 current_time_str = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
 
 st.markdown(f"""
@@ -235,27 +237,26 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ----------------- REAL-TIME INDICES TICKER -----------------
+# Indices Ticker
 indices_data = fetch_market_indices()
 if indices_data:
     idx_cols = st.columns(len(indices_data))
     for i, (name, val) in enumerate(indices_data.items()):
-        delta_color = "normal" if val["change"] >= 0 else "inverse"
         idx_cols[i].metric(
             label=name,
             value=f"{val['last']:,.2f}",
-            delta=f"{val['change']:+.2f} ({val['pChange']}%)"
+            delta=f"{val['change']:+.2f} ({val['pChange']:+.2f}%)"
         )
 st.write("")
 
-# ----------------- MAIN TABS WORKSPACE -----------------
+# Main Tabs Workspace
 t1, t2, t3 = st.tabs([
     "📊 OPEN INTEREST & OPTION CHAIN",
     "⚡ F&O MARKET BREADTH (180+ CONTRACTS)",
     "🎯 TOP VOLUME & MARKET MOVERS"
 ])
 
-# ==================== TAB 1: OPTION CHAIN & OI ====================
+# TAB 1: OPTION CHAIN & OI
 with t1:
     ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([2, 2, 1])
     with ctrl_col1:
@@ -276,22 +277,22 @@ with t1:
         parsed_rows = []
         for item in raw_oc:
             if item.get("expiryDate") == sel_expiry:
-                strike = item.get("strikePrice")
+                strike = clean_float(item.get("strikePrice"))
                 ce = item.get("CE", {})
                 pe = item.get("PE", {})
                 parsed_rows.append({
-                    "Call OI": ce.get("openInterest", 0),
-                    "Call Chg OI": ce.get("changeinOpenInterest", 0),
-                    "Call IV": ce.get("impliedVolatility", 0),
-                    "Call LTP": ce.get("lastPrice", 0),
+                    "Call OI": clean_float(ce.get("openInterest")),
+                    "Call Chg OI": clean_float(ce.get("changeinOpenInterest")),
+                    "Call IV": clean_float(ce.get("impliedVolatility")),
+                    "Call LTP": clean_float(ce.get("lastPrice")),
                     "Strike": strike,
-                    "Put LTP": pe.get("lastPrice", 0),
-                    "Put IV": pe.get("impliedVolatility", 0),
-                    "Put Chg OI": pe.get("changeinOpenInterest", 0),
-                    "Put OI": pe.get("openInterest", 0)
+                    "Put LTP": clean_float(pe.get("lastPrice")),
+                    "Put IV": clean_float(pe.get("impliedVolatility")),
+                    "Put Chg OI": clean_float(pe.get("changeinOpenInterest")),
+                    "Put OI": clean_float(pe.get("openInterest"))
                 })
                 
-        df_oc = pd.DataFrame(parsed_rows).sort_values("Strike")
+        df_oc = pd.DataFrame(parsed_rows).sort_values("Strike").reset_index(drop=True)
         
         if not df_oc.empty:
             total_ce_oi = df_oc["Call OI"].sum()
@@ -300,22 +301,20 @@ with t1:
             atm_strike = min(df_oc["Strike"], key=lambda x: abs(x - spot))
             max_pain = calculate_max_pain(df_oc)
             
-            # Metric Cockpit
             m1, m2, m3, m4, m5 = st.columns(5)
             m1.metric("Underlying Spot", f"{spot:,.2f}")
-            m2.metric("Total Call OI", f"{total_ce_oi:,}")
-            m3.metric("Total Put OI", f"{total_pe_oi:,}")
+            m2.metric("Total Call OI", f"{int(total_ce_oi):,}")
+            m3.metric("Total Put OI", f"{int(total_pe_oi):,}")
             pcr_sentiment = "BULLISH (>1.2)" if pcr > 1.2 else ("BEARISH (<0.8)" if pcr < 0.8 else "NEUTRAL")
             m4.metric("PCR Ratio", f"{pcr:.2f}", delta=pcr_sentiment)
             m5.metric("Max Pain", f"{max_pain:,.0f}")
             
             st.divider()
             
-            # Strike Filter
-            atm_idx = df_oc.index[df_oc["Strike"] == atm_strike].tolist()[0]
+            atm_matches = df_oc.index[df_oc["Strike"] == atm_strike].tolist()
+            atm_idx = atm_matches[0] if atm_matches else len(df_oc) // 2
             sub_oc = df_oc.iloc[max(0, atm_idx - 12) : min(len(df_oc), atm_idx + 13)]
             
-            # StockMojo Style Dual Bar Chart (Total OI & Change in OI)
             fig = make_subplots(
                 rows=1, cols=2,
                 subplot_titles=(
@@ -325,7 +324,6 @@ with t1:
                 shared_yaxes=False
             )
             
-            # Subplot 1: Total OI
             fig.add_trace(go.Bar(
                 x=sub_oc["Strike"], y=sub_oc["Call OI"],
                 name="Call OI (Resistance)", marker_color="#ef4444"
@@ -335,7 +333,6 @@ with t1:
                 name="Put OI (Support)", marker_color="#22c55e"
             ), row=1, col=1)
             
-            # Subplot 2: Change in OI
             fig.add_trace(go.Bar(
                 x=sub_oc["Strike"], y=sub_oc["Call Chg OI"],
                 name="Call OI Chg (Writing)", marker_color="#f87171"
@@ -346,7 +343,7 @@ with t1:
             ), row=1, col=2)
             
             fig.update_layout(
-                height=480,
+                height=460,
                 barmode="group",
                 plot_bgcolor="#0b0e14",
                 paper_bgcolor="#0b0e14",
@@ -356,13 +353,12 @@ with t1:
             fig.update_xaxes(type="category")
             st.plotly_chart(fig, use_container_width=True)
             
-            # Chain Table
             st.subheader("Interactive Option Matrix")
             st.dataframe(sub_oc, use_container_width=True, height=450)
     else:
         st.warning("Receiving public gateway response... Click 'FORCE REFRESH' if market feed is busy.")
 
-# ==================== TAB 2: F&O BUILDUP (ALL STOCKS) ====================
+# TAB 2: F&O BUILDUP (ALL STOCKS)
 with t2:
     st.subheader("All 180+ F&O Equities Build-up Screener")
     df_fno = fetch_fno_market_data()
@@ -393,7 +389,7 @@ with t2:
     else:
         st.info("Synchronizing F&O market contracts...")
 
-# ==================== TAB 3: VOLUME & MARKET MOVERS ====================
+# TAB 3: VOLUME & MARKET MOVERS
 with t3:
     st.subheader("Market Breadth: Top Gainers, Losers & Heavy Turnover")
     if not df_fno.empty:
