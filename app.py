@@ -1,5 +1,4 @@
-
-  import streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 from curl_cffi import requests
@@ -240,4 +239,4 @@ with tab4:
         with v_col2:
             st.write("💰 **Most Active by Turnover (Crores ₹)**")
             st.dataframe(all_stocks.sort_values(by="Turnover (Cr)", ascending=False)[["Symbol", "LTP", "% Change", "Turnover (Cr)"]].head(10), use_container_width=True)
-            
+          
